@@ -4,7 +4,7 @@ import json
 from datetime import datetime, timedelta
 
 # ── 1. 내일 날짜 (한국시간 기준) ──────────────────────
-tomorrow = (datetime.utcnow() + timedelta(hours=9, days=1)).strftime('%Y-%m-%d')
+tomorrow = (datetime.utcnow() + timedelta(hours=9)).strftime('%Y-%m-%d')
 
 # ── 2. NBA 경기 조회 (ESPN API) ────────────────────────
 try:
