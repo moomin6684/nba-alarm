@@ -2,8 +2,6 @@ import requests
 import os
 import json
 from datetime import datetime, timedelta
-from base64 import b64encode
-from nacl import encoding, public
 
 # ── 1. 내일 날짜 (한국시간 기준) ──────────────────────
 tomorrow = (datetime.utcnow() + timedelta(hours=9)).strftime('%Y-%m-%d')
@@ -47,31 +45,18 @@ token_res = requests.post(
 token_data = token_res.json()
 access_token = token_data["access_token"]
 new_refresh_token = token_data.get("refresh_token", os.environ["KAKAO_REFRESH_TOKEN"])
-print("새 refresh_token 수신:", "Yes" if "refresh_token" in token_data else "No (기존 유지)")
 
-# ── 5. GitHub Secret 자동 업데이트 ────────────────────
-def update_github_secret(secret_name, secret_value):
-    github_token = os.environ["GH_TOKEN"]
-    repo = os.environ["GITHUB_REPOSITORY"]
+# ── 5. 새 refresh_token을 파일에 저장 ─────────────────
+with open("token.txt", "w") as f:
+    f.write(new_refresh_token)
 
-    # 공개키 가져오기
-    pub_key_res = requests.get(
-        f"https://api.github.com/repos/{repo}/actions/secrets/public-key",
-        headers={"Authorization": f"token {github_token}"}
-    )
-    pub_key_data = pub_key_res.json()
-    pub_key = public.PublicKey(pub_key_data["key"].encode(), encoding.Base64Encoder())
-    sealed_box = public.SealedBox(pub_key)
-    encrypted = b64encode(sealed_box.encrypt(secret_value.encode())).decode()
-
-    requests.put(
-        f"https://api.github.com/repos/{repo}/actions/secrets/{secret_name}",
-        headers={"Authorization": f"token {github_token}"},
-        json={"encrypted_value": encrypted, "key_id": pub_key_data["key_id"]}
-    )
-    print(f"{secret_name} 업데이트 완료!")
-
-update_github_secret("KAKAO_REFRESH_TOKEN", new_refresh_token)
+import subprocess
+subprocess.run(["git", "config", "user.email", "action@github.com"])
+subprocess.run(["git", "config", "user.name", "GitHub Action"])
+subprocess.run(["git", "add", "token.txt"])
+subprocess.run(["git", "commit", "-m", "Update refresh token", "--allow-empty"])
+subprocess.run(["git", "push"])
+print("refresh_token 저장 완료!")
 
 # ── 6. 카카오톡 나에게 보내기 ─────────────────────────
 template = {
