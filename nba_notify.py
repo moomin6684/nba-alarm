@@ -1,5 +1,6 @@
 import requests
 import os
+import json
 from datetime import datetime, timedelta
 
 # ── 1. 내일 날짜 (한국시간 기준) ──────────────────────
@@ -20,7 +21,7 @@ except Exception as e:
 if not events:
     text = f"🏀 내일 NBA 경기 없음 ({tomorrow} 한국시간)"
 else:
-    lines = [f"🏀 내일 NBA 경기 일정 ({tomorrow} 한국시간)\n"]
+    lines = [f"🏀 내일 NBA 경기 일정 ({tomorrow} 한국시간)"]
     for e in events:
         try:
             utc_str = e["date"][:16]
@@ -30,7 +31,7 @@ else:
             lines.append(f"⏰ {kst_time.strftime('%H:%M')} | {teams}")
         except:
             continue
-    text = "\n".join(lines)
+    text = " | ".join(lines)
 
 # ── 4. 카카오 Access Token 갱신 ───────────────────────
 token_res = requests.post(
@@ -44,12 +45,18 @@ token_res = requests.post(
 access_token = token_res.json()["access_token"]
 
 # ── 5. 카카오톡 나에게 보내기 ─────────────────────────
+template = {
+    "object_type": "text",
+    "text": text,
+    "link": {
+        "web_url": "https://www.nba.com"
+    }
+}
+
 kakao_res = requests.post(
     "https://kapi.kakao.com/v2/api/talk/memo/default/send",
     headers={"Authorization": f"Bearer {access_token}"},
-    data={
-        "template_object": f'{{"object_type":"text","text":"{text}","link":{{"web_url":"https://www.nba.com"}}}}'
-    }
+    data={"template_object": json.dumps(template)}
 )
 print("전송 완료!\n" + text)
 print("카카오 응답:", kakao_res.status_code, kakao_res.text)
