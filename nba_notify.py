@@ -5,27 +5,32 @@ from datetime import datetime, timedelta
 # ── 1. 내일 날짜 (한국시간 기준) ──────────────────────
 tomorrow = (datetime.utcnow() + timedelta(hours=9, days=1)).strftime('%Y-%m-%d')
 
-# ── 2. NBA 경기 조회 ───────────────────────────────────
-res = requests.get(
-    "https://api.balldontlie.io/v1/games",
-    params={"dates[]": tomorrow, "per_page": 30},
-    headers={"Authorization": "0"}
-)
-games = res.json().get("data", [])
+# ── 2. NBA 경기 조회 (ESPN API) ────────────────────────
+try:
+    res = requests.get(
+        f"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates={tomorrow.replace('-', '')}",
+        timeout=10
+    )
+    events = res.json().get("events", [])
+except Exception as e:
+    print(f"API 오류: {e}")
+    events = []
 
 # ── 3. 메시지 구성 ─────────────────────────────────────
-if not games:
-    text = f"🏀 {tomorrow}\\n내일은 NBA 경기가 없습니다!"
+if not events:
+    text = f"🏀 내일 NBA 경기 없음 ({tomorrow} 한국시간)"
 else:
-    lines = [f"🏀 내일 NBA 경기 일정 ({tomorrow} 한국시간)\\n"]
-    for g in games:
-        utc_time = datetime.strptime(g["date"][:16], "%Y-%m-%dT%H:%M")
-        kst_time = utc_time + timedelta(hours=9)
-        lines.append(
-            f"⏰ {kst_time.strftime('%H:%M')} | "
-            f"{g['home_team']['abbreviation']} vs {g['visitor_team']['abbreviation']}"
-        )
-    text = "\\n".join(lines)
+    lines = [f"🏀 내일 NBA 경기 일정 ({tomorrow} 한국시간)\n"]
+    for e in events:
+        try:
+            utc_str = e["date"][:16]
+            utc_time = datetime.strptime(utc_str, "%Y-%m-%dT%H:%M")
+            kst_time = utc_time + timedelta(hours=9)
+            teams = e["shortName"]
+            lines.append(f"⏰ {kst_time.strftime('%H:%M')} | {teams}")
+        except:
+            continue
+    text = "\n".join(lines)
 
 # ── 4. 카카오 Access Token 갱신 ───────────────────────
 token_res = requests.post(
@@ -46,4 +51,4 @@ requests.post(
         "template_object": f'{{"object_type":"text","text":"{text}","link":{{"web_url":"https://www.nba.com"}}}}'
     }
 )
-print("전송 완료!\\n" + text)
+print("전송 완료!\n" + text)
