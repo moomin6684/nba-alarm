@@ -2,6 +2,8 @@ import requests
 import os
 import json
 from datetime import datetime, timedelta
+from base64 import b64encode
+from nacl import encoding, public
 
 # ── 1. 내일 날짜 (한국시간 기준) ──────────────────────
 tomorrow = (datetime.utcnow() + timedelta(hours=9)).strftime('%Y-%m-%d')
@@ -33,7 +35,7 @@ else:
             continue
     text = " | ".join(lines)
 
-# ── 4. 카카오 Access Token 갱신 ───────────────────────
+# ── 4. 카카오 Access Token + 새 Refresh Token 갱신 ────
 token_res = requests.post(
     "https://kauth.kakao.com/oauth/token",
     data={
@@ -42,17 +44,41 @@ token_res = requests.post(
         "refresh_token": os.environ["KAKAO_REFRESH_TOKEN"],
     }
 )
-access_token = token_res.json()["access_token"]
+token_data = token_res.json()
+access_token = token_data["access_token"]
+new_refresh_token = token_data.get("refresh_token", os.environ["KAKAO_REFRESH_TOKEN"])
+print("새 refresh_token 수신:", "Yes" if "refresh_token" in token_data else "No (기존 유지)")
 
-# ── 5. 카카오톡 나에게 보내기 ─────────────────────────
+# ── 5. GitHub Secret 자동 업데이트 ────────────────────
+def update_github_secret(secret_name, secret_value):
+    github_token = os.environ["GH_TOKEN"]
+    repo = os.environ["GITHUB_REPOSITORY"]
+
+    # 공개키 가져오기
+    pub_key_res = requests.get(
+        f"https://api.github.com/repos/{repo}/actions/secrets/public-key",
+        headers={"Authorization": f"token {github_token}"}
+    )
+    pub_key_data = pub_key_res.json()
+    pub_key = public.PublicKey(pub_key_data["key"].encode(), encoding.Base64Encoder())
+    sealed_box = public.SealedBox(pub_key)
+    encrypted = b64encode(sealed_box.encrypt(secret_value.encode())).decode()
+
+    requests.put(
+        f"https://api.github.com/repos/{repo}/actions/secrets/{secret_name}",
+        headers={"Authorization": f"token {github_token}"},
+        json={"encrypted_value": encrypted, "key_id": pub_key_data["key_id"]}
+    )
+    print(f"{secret_name} 업데이트 완료!")
+
+update_github_secret("KAKAO_REFRESH_TOKEN", new_refresh_token)
+
+# ── 6. 카카오톡 나에게 보내기 ─────────────────────────
 template = {
     "object_type": "text",
     "text": text,
-    "link": {
-        "web_url": "https://www.nba.com"
-    }
+    "link": {"web_url": "https://www.nba.com"}
 }
-
 kakao_res = requests.post(
     "https://kapi.kakao.com/v2/api/talk/memo/default/send",
     headers={"Authorization": f"Bearer {access_token}"},
